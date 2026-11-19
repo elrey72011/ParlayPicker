@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import threading
+import time
 from app_core.scoped_reads import singleflight
 
 from app_core.evidence_config import safe_error, EvidenceStorageError
@@ -25,6 +26,19 @@ KEYS = {"validation_plans": (0,),"closing_observations": (0,),"bundles": (0,), "
 _lock = threading.RLock()
 _restored = set()
 _status = {}
+# A restore that fails is remembered, so nothing lists the folder again for a while (2026-11-19). A failed restore
+# has listed the whole folder, which took sixteen minutes on that day, and its answer does not change by asking
+# again a minute later. One Refresh asked twice: at its start, which only warns, and again while preparing review
+# candidates, which stopped the Refresh. When the store refused its own contents (two files under one name, a
+# changed checksum) only a repair changes the answer, so the wait is long; a request that failed may well succeed
+# next time, so that wait only covers the Refresh under way. The Workspace's "Restore and sync evidence storage"
+# always tries, and so does a full verification.
+RETRY_AFTER_SECONDS = 30 * 60
+RETRY_AFTER_FAILED_REQUEST_SECONDS = 5 * 60
+_failed = {}                       # where the evidence lives and which database -> (when it failed, safe message, wait)
+_now = time.monotonic
+_bundle_lock = threading.Lock()
+_bundles = {}                      # (store, folder, prefix, version) -> the bundle row this process registered or adopted
 # Process-local receipts only: restored or read-back-verified immutable bytes.
 # Explicit sync remains a full remote verification and can detect external edits.
 _verified = {}
@@ -171,11 +185,39 @@ def _put(client, table, row, *, choose_existing=False):
     return verified
 
 
+class EvidenceRestoreError(RuntimeError):
+    """The saved evidence could not be restored for this process. The message is safe to show."""
+
+
+def _not_retried(failed, now):
+    """What a caller is told while a failed restore is not being repeated: the failure, how old it is, what tries now."""
+    since, message, wait = failed
+    return (f"{message} (not tried again: that was {int((now - since) // 60)} min ago and the next try comes "
+            f"{int(wait // 60)} min after it; Workspace > Prediction Evidence Status > Restore and sync evidence storage tries now)")
+
+
 def register_bundle(version, frozen, manifest):
-    """Concurrent fresh instances adopt the same first remote freeze timestamp."""
+    """Concurrent fresh instances adopt the same first remote freeze timestamp.
+
+    One at a time within a process, and a caller who finds the version already registered here takes that row
+    without asking Drive (2026-11-19). Drive cannot create a file only if its name is free: the store looks for
+    the name and then creates, and a search can miss a file made a moment before. At 6:43:48 PM ET on
+    18 November two Refreshes that began together after a rebuild each found no bundle for the new code and
+    each created one: two files 16 ms apart under one name, their freeze times 64 ms apart. Every restore
+    refused the pair from then on, until one of the two was moved to the trash by hand.
+    """
     if not settings()[0]:
         return frozen
-    return _put(_client(), "bundles", (version, frozen, manifest), choose_existing=True)[1]
+    with _bundle_lock:
+        client = _client()
+        store = client.storage_scope_hash() if callable(getattr(client, "storage_scope_hash", None)) else id(client)
+        scope = (store, *settings(), version)
+        known = _bundles.get(scope)
+        if known is not None and known[2] == manifest:
+            return known[1]
+        row = _put(client, "bundles", (version, frozen, manifest), choose_existing=True)
+        _bundles[scope] = tuple(row)
+        return row[1]
 
 
 def restore(path=None, *, client=None, full_verification=False, ids=None, prefer_index=False):
@@ -209,6 +251,7 @@ def _restore_guarded(path=None, *, client=None, full_verification=False, ids=Non
             if identity[:-1] != current[:-1] or (identity[-1] != "missing" and identity[-1] != current[-1]):
                 raise EvidenceStorageError("Evidence scope or database generation changed during restore; retry initialization.")
             _restored.add(current)
+            _failed.pop(current[1:-1], None)
             return result
         except Exception:
             current = _scope(path, client)
@@ -402,13 +445,23 @@ def restore_once(path=None, *, full_verification=False):
         # caller may have created/replaced the database while we waited.
         identity = _scope(path)
         if full_verification or identity not in _restored:
+            failed = _failed.get(identity[1:-1])
+            if failed and not full_verification and 0 <= _now() - failed[0] < failed[2]:
+                with PerformanceSpan("evidence_initialize_not_retried",
+                        storage_scope_hash=opaque_hash(*identity)) as span:
+                    span.set(listing_traversals=0, objects_downloaded=0, cache_hits=1,
+                             verification_status="restore_failed_recently")
+                raise EvidenceRestoreError(_not_retried(failed, _now()))
             _restored.discard(identity)
             try:
                 restore(path, full_verification=full_verification, prefer_index=not full_verification)
                 _restored.add(_scope(path))
+                _failed.pop(identity[1:-1], None)
             except Exception as exc:
                 _status.update(status="error", error=safe_error(exc, "Restore"))
-                raise RuntimeError(_status["error"]) from None
+                wait = RETRY_AFTER_SECONDS if isinstance(exc, EvidenceStorageError) else RETRY_AFTER_FAILED_REQUEST_SECONDS
+                _failed[identity[1:-1]] = (_now(), _status["error"], wait)
+                raise EvidenceRestoreError(_status["error"]) from None
         else:
             with PerformanceSpan("evidence_initialize_reuse",
                     database_generation=_database_generation(Path(path or database_path())),
