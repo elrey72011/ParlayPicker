@@ -419,6 +419,11 @@ conflicting duplicates fail closed. No update/delete operation is implemented.
         """The bytes of every file with exactly this name, each checked against Drive's own checksum."""
         return [self._read_files([item]) for item in self._files(name)]
 
+    def file_facts(self, file_id):
+        """When a file was created and how large it is: for a report, never for a decision (2026-11-19)."""
+        return _read(self.session, f"{API}/{file_id}", timeout=20,
+                     params={"supportsAllDrives": "true", "fields": "id,createdTime,size,trashed"}).json()
+
     def _inventory_groups(self, inventory, prefixes):
         if not inventory.complete or inventory.scope_hash != self.storage_scope_hash():
             raise EvidenceStorageError("Drive inventory is incomplete or belongs to a different storage scope")

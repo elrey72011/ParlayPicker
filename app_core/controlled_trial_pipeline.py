@@ -22,11 +22,22 @@ def prepare_review_candidates(
         pool = pd.DataFrame()
     from app_core.prediction_evidence import bind_authoritative_candidates
     from app_core.controlled_trial import attest_candidate_integrity
+    from app_core.candidate_evidence_schema import project
+    from app_core.evidence_remote import EvidenceRestoreError
     from core.prospective_uncertainty import prepare_live
 
     pool = bind_authoritative_candidates(pool)
     pool = attest_candidate_integrity(pool)
-    pool = prepare_live(pool)
+    try:
+        pool = prepare_live(pool)
+    except EvidenceRestoreError as exc:
+        # The saved history could not be read (2026-11-19: two Drive files under one evidence name stopped
+        # every restore, and this call stopped the Refresh with it). With no history there is no forecast
+        # to rest on it, so the pool goes on exactly as prepare_live returns it for a sport with no
+        # validation plan: projected, nothing forecast, nothing approved. The board still shows its picks,
+        # and begin_run has already warned that this run is not saved.
+        pool = project(pool)
+        diagnostics["evidence_history_unavailable"] = str(exc)
     pool = evaluate_candidates(pool, now=now)
     trials = select_review_candidates(pool, now=now)
     selected = set(trials.get("candidate_id", pd.Series(dtype=str)).astype(str))
