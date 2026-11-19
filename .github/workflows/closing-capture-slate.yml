@@ -19,8 +19,11 @@ on:
     - cron: '17 16 * * 0,6'    # weekends 11:17 AM EST, early football
 permissions:
   contents: read
+# Its own queue (2026-11-19). GitHub keeps one waiting run per group and drops it when a newer one
+# joins, so in the half-hourly job's group a late half-hourly start could replace a waiting slate
+# run and the evening's closes would be lost. A second slate run only ever replaces another slate run.
 concurrency:
-  group: closing-line-capture
+  group: closing-line-capture-slate
   cancel-in-progress: false
 jobs:
   slate-closes:

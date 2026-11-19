@@ -310,6 +310,15 @@ def test_the_workflow_runs_the_loop_capped_and_with_a_window_longer_than_its_int
     assert options["interval"] < options["window"] <= 30 and 0 < options["max-credits"] <= 300
 
 
+def test_a_waiting_slate_run_cannot_be_replaced_by_the_half_hourly_job():
+    """GitHub drops a group's waiting run when a newer one joins it: the two closing jobs must not share a group."""
+    import yaml
+    groups = {name: yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text())["concurrency"]
+              for name in ("closing-capture-slate.yml", "closing-capture.yml")}
+    assert groups["closing-capture-slate.yml"]["group"] != groups["closing-capture.yml"]["group"]
+    assert all(group["cancel-in-progress"] is False for group in groups.values())      # a running capture is never cut
+
+
 # The provider's own count ---------------------------------------------------------------------------
 
 def test_the_odds_client_keeps_the_providers_usage_counters(monkeypatch, tmp_path):
