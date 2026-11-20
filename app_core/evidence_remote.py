@@ -435,6 +435,44 @@ def _merge(path, client, database, rows, ids, scope_hash):
     return imported
 
 
+def restore_newer(path=None, since=None, *, client=None):
+    """Merge the evidence files created after ``since`` (epoch seconds) into the local store; saved runs added.
+
+    For a job that restored once and keeps running. On 2026-11-19 the closing-capture loop read closes for the
+    picks it knew when it started, so a Refresh made after that got none: its candidates were not in the loop's
+    copy of the store. One listing of the files created since, each then read, checked and merged exactly as a
+    restore does it. It is not a restore: it says nothing about older files, leaves no index and does not mark
+    the store restored. 0 where there is no remote store, no moment, or a client that cannot list by creation time.
+    """
+    from app_core.evidence_drive import DriveInventory
+    from app_core.prediction_evidence import database_path
+    if since is None or not settings()[0]:
+        return 0
+    client = client or _client()
+    if not all(callable(getattr(client, name, None)) for name in ("created_since", "read_verified_prefixes", "storage_scope_hash")):
+        return 0
+    bucket, prefix = settings()
+    database = Path(path or database_path()).resolve()
+    ids = operation_ids(refresh_run_id=os.urandom(8).hex())
+    prefixes = {table: f"{prefix}/{table}/" for table in TABLES}
+    tables = tuple(prefixes.values())
+    site = os.environ.get("PARLAYPICKER_NETLIFY_SITE_ID", "")
+    scope_hash = opaque_hash(client.storage_scope_hash(), bucket, prefix, site)
+    with _lock:
+        newer, stats = client.created_since(since, ids=ids)
+        files = tuple({name: item[name] for name in ("id", "name", "sha256Checksum") if name in item}
+                      for item in newer if item["name"].startswith(tables))
+        if not files:
+            return 0
+        # The same namespace as a restore's inventory, so the files it already holds in its cache are reused.
+        inventory = DriveInventory(client.storage_scope_hash(), ids["action_id"], opaque_hash(prefix, site), files,
+                                   stats.get("listing_pages"), stats.get("metadata_items_seen"), covers=tables)
+        rows, _ = _read_remote(client=client, database=database, bucket=bucket, prefixes=prefixes,
+                               full_verification=False, ids=ids, scope_hash=scope_hash, optimized=True,
+                               discover=lambda: inventory)
+        return _merge(path, client, database, rows, ids, scope_hash)
+
+
 def restore_once(path=None, *, full_verification=False):
     from app_core.prediction_evidence import database_path
     bucket, prefix = settings()
