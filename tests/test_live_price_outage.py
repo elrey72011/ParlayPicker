@@ -144,3 +144,38 @@ def test_the_homepage_board_shows_the_outage_above_the_picks():
     assert not app.exception
     errors = [e.value for e in app.error]
     assert len(errors) == 1 and "this month's credits are used up" in errors[0]
+
+
+# ---- the closing-capture job ----
+
+def test_the_capture_loop_prints_a_refusal_instead_of_only_the_last_good_count(monkeypatch, capsys):
+    import json
+    import importlib.util
+    from pathlib import Path
+    import core.streamlit_pipeline as pipeline
+    spec = importlib.util.spec_from_file_location(
+        "closing_capture_loop", Path(__file__).resolve().parents[1] / "scripts" / "closing_capture_loop.py")
+    loop = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loop)
+    monkeypatch.setattr(odds_api, "last_usage", {"sport": "basketball_ncaab", "last": "3", "used": "19979", "remaining": "21"})
+    monkeypatch.setattr(odds_api, "last_refusal", {})
+    answers = iter([None, OUT])
+
+    def fetch_live_odds_dataframe(sports):
+        odds_api.last_refusal.clear()
+        odds_api.last_refusal.update(next(answers) or {})
+        return pd.DataFrame()
+    monkeypatch.setattr(pipeline, "fetch_live_odds_dataframe", fetch_live_odds_dataframe)
+    now = [0.0]
+
+    def capture(database, *, fetch=None):
+        fetch(["NCAAB"])
+        return {"verified": 0, "unavailable": 1}
+
+    def sleep(seconds):
+        now[0] += seconds
+    loop.run("db", minutes=21, interval=10, capture=capture, restore=lambda path: None, backup=lambda path: None,
+             clock=lambda: now[0], sleep=sleep)
+    cycles = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert "provider_refusal" not in cycles[0] and cycles[0]["provider_usage"]["remaining"] == "21"
+    assert cycles[1]["provider_refusal"] == OUT                  # the refused cycle says so beside the stale count

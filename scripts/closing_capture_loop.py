@@ -71,11 +71,14 @@ def run(database, minutes, interval, *, capture=None, restore=None, backup=None,
     if window is not None and "within_seconds" in accepted:
         options["within_seconds"] = window * 60
     if "fetch" in accepted:
-        provider_usage = None
+        provider_usage = provider_refusal = None
         if fetch is None:
             from app_core import odds_api
             from core.streamlit_pipeline import fetch_live_odds_dataframe as fetch
             provider_usage = odds_api.last_usage
+            # A refused request (HTTP 401 or 403, e.g. the month's credits used up) is printed as such:
+            # on 2026-11-20 seven picks read "game_not_in_live_odds" beside the last good count.
+            provider_refusal = odds_api.last_refusal
 
         def counted(sports):
             cost = sum(CREDITS.get(str(sport).upper(), DEFAULT_CREDITS) for sport in sports)
@@ -86,6 +89,8 @@ def run(database, minutes, interval, *, capture=None, restore=None, backup=None,
             finally:
                 if provider_usage:
                     fetched["provider_usage"] = dict(provider_usage)
+                if provider_refusal:
+                    fetched["provider_refusal"] = dict(provider_refusal)
         options["fetch"] = counted
 
     def back_up():
