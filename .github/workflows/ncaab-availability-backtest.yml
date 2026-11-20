@@ -1,0 +1,41 @@
+name: NCAAB availability backtest (research only)
+# Owner 2026-11-20: does the closing line already price a missing key player?
+# Player box scores from CollegeBasketballData against archived closing lines for two finished
+# seasons. Started by hand only. About 110 CBBD calls; no Odds API calls; writes nothing to
+# Drive or the evidence store.
+on:
+  workflow_dispatch:
+    inputs:
+      scored_season:
+        description: 'Later of the two seasons scored (CBBD numbering, 2026 = 2025-26)'
+        default: '2026'
+permissions:
+  contents: read
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CBBD_API_KEY: ${{ secrets.CBBD_API_KEY }}
+      CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}
+      SCORED_SEASON: ${{ inputs.scored_season }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install runtime dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Availability backtest
+        run: >-
+          python -u scripts/ncaab_availability_backtest.py
+          --output "${{ runner.temp }}/ncaab-availability/ncaab-availability-backtest.json"
+          --scored-season "${SCORED_SEASON:-2026}"
+      - name: Keep the report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncaab-availability-backtest
+          path: ${{ runner.temp }}/ncaab-availability/
+          if-no-files-found: warn
