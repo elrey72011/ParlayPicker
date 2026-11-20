@@ -243,3 +243,22 @@ def test_the_morning_job_prints_the_tally_and_nothing_in_the_pipeline_reads_it()
     assert "theover_plan.build(args.database)" in script and "theover_plan.markdown(" in script
     for name in ("core/streamlit_pipeline.py", "streamlit_app.py", "app_core/activation_closing.py"):
         assert "theover_plan" not in (ROOT / name).read_text(encoding="utf-8")
+
+
+def test_the_tally_reads_the_best_price_so_only_the_morning_report_may_load_it_and_it_saves_nothing():
+    """The best price is a pick note, kept out of everything that picks or stakes (``tests/test_pick_notes.py``).
+
+    The tally is the one reader outside the board and the exports (owner-approved 2026-11-19). It stays
+    harmless only while nothing but the morning report loads it and it saves nothing a later run could read.
+    """
+    named = set()
+    for folder in ("app", "app_core", "core", "services", "scripts"):
+        for path in (ROOT / folder).rglob("*.py"):
+            if "theover_plan" in path.read_text(encoding="utf-8", errors="replace"):
+                named.add(path.relative_to(ROOT).as_posix())
+    assert "theover_plan" not in (ROOT / "streamlit_app.py").read_text(encoding="utf-8")
+    assert named == {"scripts/track_record.py"}
+    source = (ROOT / "core" / "theover_plan.py").read_text(encoding="utf-8")
+    for writer in (".write(", "write_text", "write_bytes", "to_csv", "to_sql", "to_json(", ".execute(", ".commit(", "backup("):
+        assert writer not in source, writer
+    assert source.count("best_line_price") == 2         # the docstring, and the one read in ``bets``

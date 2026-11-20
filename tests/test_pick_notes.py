@@ -265,10 +265,17 @@ def test_both_notes_reach_the_export_column_lists():
 
 
 def test_nothing_that_selects_or_stakes_reads_the_notes_back():
-    """Display and audit only: the fields are written once and named by the grids and export lists."""
+    """Display and audit only: the fields are written once and named by the grids and export lists.
+
+    One reader stands outside them, added with the owner's approval on 2026-11-19: the read-only tally of
+    TheOver's plan (``core/theover_plan.py``), which counts a bet's units at the best price, as the plan's
+    rules say. ``tests/test_theover_plan_report.py`` pins that only the morning report loads the tally and
+    that it saves nothing, so the price still cannot reach a pick or a stake.
+    """
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
-    allowed = {"app_core/pick_notes.py", "core/streamlit_pipeline.py", "app/ui/daily_dashboard.py", "streamlit_app.py"}
+    allowed = {"app_core/pick_notes.py", "core/streamlit_pipeline.py", "app/ui/daily_dashboard.py", "streamlit_app.py",
+               "core/theover_plan.py"}
     fields = pick_notes.PRICE_FIELDS + pick_notes.TIE_FIELDS + ("best_line_expected_value",)
     users = set()
     for folder in ("app", "app_core", "core", "services", "scripts"):
