@@ -494,8 +494,13 @@ def _render_game_board(board, candidates, family):
         # Owner 2026-11-19: a game whose pick would rest on the price alone shows no pick. The cells that
         # describe that pick are left empty; the game, its status and its basis stay.
         # An approved or trial wager is never withheld: approval, not this label, decides what may be bet.
-        from app_core.rating_basis import withhold
+        # Owner 2026-11-20: the side the price slightly favours in such a game is named in a table of its
+        # own under the board, so the board does not read as if only totals had been considered. No number
+        # goes with it, and the board's own columns are unchanged.
+        from app_core.rating_basis import PRICE_FAVOURS, withhold
         passes = built_from.where(result["status"].astype(str).eq("PASS"), "")
+        favoured = withhold(display, passes, "Best pick", (), favoured=PRICE_FAVOURS)
+        favoured = favoured.loc[favoured[PRICE_FAVOURS].ne(""), ["Game", PRICE_FAVOURS]]
         display = withhold(display, passes, "Best pick", [c for c in display if c not in NO_LEAN_KEEPS])
         shown = withhold(result, passes, "pick", ("edge", "selection_score", "probability_basis"))
     st.dataframe(display, hide_index=True, width="stretch", height=min(760, 38 * (len(display) + 1)), column_config={"Selection score": st.column_config.NumberColumn(format="%.3f"), "Odds": st.column_config.NumberColumn(format="%+.0f"), "Best price": st.column_config.NumberColumn(format="%+.0f")})
@@ -507,9 +512,13 @@ def _render_game_board(board, candidates, family):
     if built_from is not None:
         from app_core.rating_basis import CAPTION as _basis_caption, counts as _basis_counts
         tally = _basis_counts(built_from)
-        from app_core.rating_basis import NO_LEAN_CAPTION
+        from app_core.rating_basis import NO_LEAN_CAPTION, PRICE_FAVOURS_CAPTION
         st.caption(f"{tally['price_only']} of {tally['picks']} picks here are built from the price alone. "
                    + _basis_caption + " " + NO_LEAN_CAPTION)
+        if len(favoured):
+            with st.expander(f"No lean: the side the price slightly favours ({len(favoured)} games)", expanded=False):
+                st.caption(PRICE_FAVOURS_CAPTION)
+                st.dataframe(favoured, hide_index=True, width="stretch")
     with st.expander("Selection details and wager explanations", expanded=False):
         st.dataframe(shown[["matchup", "pick", "approval_reason", "edge", "selection_score", "probability_basis", "start"]], hide_index=True, width="stretch")
         st.caption("Best Overall, Best Side, and Best Total identify the selected pick for each game. Wager status is separate: PASS means no approved wager. Ranking uses the composite selection score first, followed by probability, tier, EV, and edge as tie-breakers; the highest EV does not necessarily rank first. Selection score is not a win probability. Edge compares the displayed estimate with price break-even. Estimate source is shown for each selection; NFL context-backed estimates retain the prior result and injury-report status in the export. Only exact final tickets carry final production metrics and approval.")
