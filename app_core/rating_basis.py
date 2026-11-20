@@ -39,6 +39,9 @@ THEOVER_MODEL_PICK, THEOVER_PROBABILITY = "TheOver model pick", "TheOver probabi
 NO_LEAN = "No lean (price only)"
 NO_LEAN_CAPTION = ("A game whose pick would rest on the price alone shows \"" + NO_LEAN + "\" in place of a pick. "
                    "Every candidate is still in the candidate audit.")
+PRICE_FAVOURS = "Price favours"
+PRICE_FAVOURS_CAPTION = ("For each game shown as \"" + NO_LEAN + "\", the side the sportsbook's price puts slightly ahead. "
+                         "It is the price restated, not a lean: no estimate or value is shown for it.")
 CAPTION = ("Built from says what the win estimate rests on. \"Price only\" means it is the sportsbook's own "
            "price with the book's margin removed and nothing else, so it holds no view the price does not. "
            "Anything after \"Price +\" is an input that also moved the estimate; naming it does not mean it "
@@ -106,15 +109,21 @@ def price_only(labels) -> pd.Series:
     return pd.Series(labels).fillna("").astype(str).eq(PRICE_ONLY)
 
 
-def withhold(frame, labels, pick, describing=()) -> pd.DataFrame:
+def withhold(frame, labels, pick, describing=(), favoured=None) -> pd.DataFrame:
     """A copy of ``frame`` that shows no pick where the estimate is the price alone.
 
     On those rows column ``pick`` reads ``NO_LEAN`` and the ``describing`` columns, which tell of the
     pick withheld (its price, its estimate), are emptied. ``labels`` are the rows' ``basis`` labels, by
     position; a row with no label, or any other label, is left as it is.
+
+    ``favoured`` names a column to add: on a withheld row it holds the pick that was withheld, the side
+    the price puts slightly ahead, and it is empty on every other row. Nothing that describes that side
+    (its price, its estimate) comes back with it.
     """
     out = frame.copy()
     hide = price_only(labels).set_axis(out.index)
+    if favoured:
+        out[favoured] = out[pick].where(hide, "").fillna("").astype(str)
     if not hide.any():
         return out
     for column in [c for c in describing if c in out.columns and c != pick]:
