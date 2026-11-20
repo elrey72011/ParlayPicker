@@ -18,6 +18,10 @@ ESPN_ENDPOINTS = {
 
 ESPN_NCAAF_FCS_GROUP_ID = "81"
 ESPN_NCAAF_FCS_LIMIT = 300
+# ESPN's default men's college basketball scoreboard lists only its featured games (5 of the 36 on
+# 2026-11-19). Group 50 is all of Division I.
+ESPN_NCAAB_D1_GROUP_ID = "50"
+ESPN_NCAAB_D1_LIMIT = 500
 
 
 def _requested_leagues(leagues: list) -> list[str]:
@@ -42,6 +46,11 @@ def _scoreboard_urls(league: str, date_str: str) -> list[str]:
         urls.append(
             f"{base_url}?dates={date_str}&groups={ESPN_NCAAF_FCS_GROUP_ID}"
             f"&limit={ESPN_NCAAF_FCS_LIMIT}"
+        )
+    if league == "NCAAB":
+        urls.append(
+            f"{base_url}?dates={date_str}&groups={ESPN_NCAAB_D1_GROUP_ID}"
+            f"&limit={ESPN_NCAAB_D1_LIMIT}"
         )
     return urls
 
