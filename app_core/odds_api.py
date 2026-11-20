@@ -1,3 +1,4 @@
+import re
 import requests
 import logging
 from datetime import datetime, time
@@ -12,6 +13,26 @@ logger = logging.getLogger(__name__)
 # The provider's own counters from its latest answer: what that request cost ("last") and the account's
 # month so far ("used", "remaining"). Read by jobs that report their spend; never used for a decision.
 last_usage: Dict[str, str] = {}
+
+# The provider's latest refusal of a request (HTTP 401 or 403), cleared by its next good answer.
+# The Odds API answers 401 both for a bad key and when the month's credits are used up
+# (2026-11-20: every sport refused, the board fell back to -110 placeholders and said nothing).
+# Kept: the sport, the status, the provider's own error code when it is a short upper-case
+# token (OUT_OF_USAGE_CREDITS, INVALID_KEY, ...) and its credits-remaining header. Never the
+# message text, the URL or the key. Shown on the board; never used for a decision.
+last_refusal: Dict[str, object] = {}
+OUT_OF_CREDITS = "OUT_OF_USAGE_CREDITS"
+_CODE_SHAPE = re.compile(r"[A-Z][A-Z_]{2,39}")
+
+
+def provider_error_code(resp) -> str | None:
+    """The ``error_code`` field of a refusal, only when it is a short upper-case token."""
+    try:
+        body = resp.json()
+    except Exception:
+        return None
+    code = body.get("error_code") if isinstance(body, dict) else None
+    return code if isinstance(code, str) and _CODE_SHAPE.fullmatch(code) else None
 
 
 def _eastern():
@@ -125,7 +146,9 @@ class TheOddsAPIClient:
                         raise requests.exceptions.HTTPError(response=resp)
                     break
                 except requests.exceptions.HTTPError:
-                    logger.error("Odds API failed for %s [HTTP %s]", sport_key, resp.status_code)
+                    code = provider_error_code(resp) if resp.status_code in (401, 403) else None
+                    logger.error("Odds API failed for %s [HTTP %s]%s", sport_key, resp.status_code,
+                                 f" provider_code={code}" if code else "")
                     if resp.status_code == 429:
                         if attempt < max_retries:
                             logger.warning("Odds API rate limit for %s. Retrying in %s seconds...", sport_key, backoff)
@@ -137,6 +160,9 @@ class TheOddsAPIClient:
                                 f"Odds API rate limit exhausted for {sport_key} [HTTP 429]", response=resp
                             ) from None
                     elif resp.status_code in (401, 403):
+                        last_refusal.clear()
+                        last_refusal.update(sport=sport_key, http_status=resp.status_code, code=code,
+                                            remaining=resp.headers.get("x-requests-remaining"))
                         raise OddsAPIAuthError(
                             f"Odds API authentication failed for {sport_key} [HTTP {resp.status_code}]",
                             response=resp,
@@ -146,6 +172,7 @@ class TheOddsAPIClient:
                         f"Odds API failed for {sport_key} [HTTP {resp.status_code}]", response=resp
                     ) from None
 
+            last_refusal.clear()
             data = resp.json()
             import json
             import os

@@ -532,6 +532,10 @@ def render_daily_dashboard(today, details, frame: pd.DataFrame, candidates: pd.D
         from app.ui.slate_coverage import render_coverage
         render_coverage(frame.attrs.get('slate_coverage'), key='today_slate_coverage')
         st.subheader("Best picks")
+        from app_core import live_prices, odds_api
+        _outage = live_prices.outage(candidates, odds_api.last_refusal)
+        if _outage:
+            st.error(_outage["message"])
         st.caption("Saved analysis · One selection per game in each view. Game markets only. Player props and parlays remain in Workspace → Full Pick Board and Parlays.")
         if board.empty:
             st.info("Start with your sport and bankroll, then select Run Game Analysis. Add optional files under Settings & research first.")
