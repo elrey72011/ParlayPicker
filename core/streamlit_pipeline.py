@@ -1338,6 +1338,11 @@ _TRUSTED_LIVE_LINE_SOURCES = frozenset({
     "fanduel_priced_total_consensus",
     "draftkings_priced_total_consensus",
     "betmgm_priced_total_consensus",
+    # Emitted only when no book quotes the consensus total and a standard book
+    # within half a point of it has a complete, priced Over/Under pair of its own.
+    "fanduel_priced_total_split",
+    "draftkings_priced_total_split",
+    "betmgm_priced_total_split",
 })
 
 
@@ -8167,21 +8172,51 @@ def _usable_total_price_pair(row, book):
     )
 
 
-def _consistent_total_book(row, side):
-    """First book with a complete priced total pair at the consensus line.
+# When two standard books sit a point apart, their reference is the midpoint, which no book
+# quotes. A standard book within half a point of that unquoted reference is still a real
+# quote, and the spread fallback already reads books within half a point of its reference.
+SPLIT_TOTAL_TOL = 0.5
 
-    Skip missing or suspended prices and mismatched over/under lines, so recovery
+
+def _priced_total_book(row, side):
+    """``(book, basis)`` for a total read from a book other than Novig's own quote, else ``(None, None)``.
+
+    ``consensus``: the first book with a complete priced total pair at the consensus line.
+    Missing or suspended prices and mismatched over/under lines are skipped, so recovery
     cannot stop at an unpriced book while a usable quote exists later in the list.
+
+    ``split``: no book quotes the consensus line at all, because the standard books are
+    split and the reference is their unquoted midpoint. Then the first standard book with
+    a complete priced pair within ``SPLIT_TOTAL_TOL`` of it is read: its own line with its
+    own two prices, never a mix. A consensus line that a book does quote, priced or not,
+    is never replaced by a neighbouring line (owner-approved 2026-11-20; UMBC at Ohio
+    State on 2026-11-19 lost its total to FanDuel 156.5 against DraftKings 155.5).
     """
     consensus = _consensus_total_line(row)
     if pd.isna(consensus):
-        return None
-    for bk in ("novig", "fanduel", "draftkings", "betmgm"):
+        return None, None
+    books = ("novig", "fanduel", "draftkings", "betmgm")
+    for bk in books:
         pt = pd.to_numeric(row.get(f"{bk}_{side}_point"), errors="coerce")
         if (pd.notna(pt) and abs(float(pt) - consensus) < 1e-9
                 and _usable_total_price_pair(row, bk)):
-            return bk
-    return None
+            return bk, "consensus"
+    for bk in books:        # either side of any book: the answer must not differ between Over and Under
+        for quoted_side in ("over", "under"):
+            pt = pd.to_numeric(row.get(f"{bk}_{quoted_side}_point"), errors="coerce")
+            if pd.notna(pt) and abs(float(pt) - consensus) < 1e-9:
+                return None, None
+    for bk in books[1:]:
+        pt = pd.to_numeric(row.get(f"{bk}_{side}_point"), errors="coerce")
+        if (pd.notna(pt) and abs(float(pt) - consensus) <= SPLIT_TOTAL_TOL + 1e-9
+                and _usable_total_price_pair(row, bk)):
+            return bk, "split"
+    return None, None
+
+
+def _consistent_total_book(row, side):
+    """The book of ``_priced_total_book``: at the consensus line, or the split fallback."""
+    return _priced_total_book(row, side)[0]
 
 
 def _consensus_standard_spread_magnitude(row):
@@ -9590,7 +9625,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                 )
                 if (pd.isna(point_val) or _novig_outlier
                         or not _usable_total_price_pair(row, "novig")):
-                    cb = _consistent_total_book(row, t_side)
+                    cb, cb_basis = _priced_total_book(row, t_side)
                     cb_point = pd.to_numeric(row.get(f"{cb}_{t_side}_point"), errors="coerce") if cb else pd.NA
                     if cb is not None and pd.notna(cb_point):
                         point_val = float(cb_point)
@@ -9611,7 +9646,7 @@ def _expand_live_odds_to_bet_rows(live_odds_df: pd.DataFrame, theover_rows: pd.D
                                 cb if pd.notna(cb_opposing_price) else "missing"
                             )
                             market_dict["odds_source"] = "odds_api"
-                            spread_line_source = f"{cb}_priced_total_consensus"
+                            spread_line_source = f"{cb}_priced_total_{cb_basis}"
                     else:
                         # Keep an unresolved research row; never attach a default
                         # price or the rejected exchange price to another line.
